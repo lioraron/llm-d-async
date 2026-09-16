@@ -115,6 +115,9 @@ func (f *GateFactory) Close() error {
 //     is in [0, 1]. Unlike prometheus-saturation and prometheus-budget, this gate does not
 //     construct queries internally — the user provides the complete PromQL expression.
 //     Params: query (required), fallback (default 0.0)
+//   - "endpoint-scrape": Scrapes a metric endpoint and interprets the normalized value as
+//     saturation (default) or a direct budget. Params: url and metric (required),
+//     value_type (saturation or budget), fallback (default 0.0)
 //
 // For unsupported or unknown gate types, returns ConstOpenGate as a safe default.
 func (f *GateFactory) CreateGate(cfg pipeline.GateConfig) (pipeline.Gate, error) {
@@ -405,6 +408,10 @@ func (f *GateFactory) CreateGate(cfg pipeline.GateConfig) (pipeline.Gate, error)
 		if err != nil {
 			return nil, err
 		}
+		valueType := paramString(params, "value_type", "saturation")
+		if valueType != "saturation" && valueType != "budget" {
+			return nil, fmt.Errorf("endpoint-scrape value_type must be either 'saturation' or 'budget', got %q", valueType)
+		}
 		baseline, err := paramFloat(params, "baseline", 0.0)
 		if err != nil {
 			return nil, err
@@ -424,6 +431,7 @@ func (f *GateFactory) CreateGate(cfg pipeline.GateConfig) (pipeline.Gate, error)
 			MetricName:     metric,
 			Labels:         labels,
 			MaxCountPerPod: maxCountPerPod,
+			DirectBudget:   valueType == "budget",
 			PodsURL:        paramString(params, "pods_url", ""),
 			PodsMetric:     paramString(params, "pods_metric", ""),
 			PodsLabels:     podsLabels,

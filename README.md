@@ -646,12 +646,13 @@ The available gate types, at a glance:
     `async_gate_metric_threshold` so you can tell which pool a gauge is reporting on.
 
 - `endpoint-scrape`: Scrapes a raw Prometheus text-format `/metrics` endpoint directly.
-  Computes budget as `clamp(1 - saturation - baseline, 0, 1)`. Supports two modes: **direct saturation** (metric value is already in [0, 1], e.g., from the EPP) and **computed saturation** (raw count divided by `max_count_per_pod`, e.g., `vllm:num_requests_waiting`).
+  Normalizes the metric to `[0, 1]`, then interprets it as saturation by default or as a direct budget when `value_type` is `budget`. The final budget is `clamp(interpreted_budget - baseline, 0, 1)`. Saturation metrics use `1 - normalized_value`; budget metrics use `normalized_value`.
 
   - `url` (**required**): Full URL to scrape (e.g., `http://vllm-sim:8000/metrics`).
   - `metric` (**required**): Metric name to extract (e.g., `vllm:num_requests_waiting`).
   - `labels` (optional): JSON object of label filters (e.g., `{"model_name":"my-model"}`). Only samples matching all labels are used.
-  - `max_count_per_pod` (optional): Per-pod capacity. When > 0, saturation = `value / max_count`. When 0, the metric value is used directly as saturation (assumed to be in [0, 1]). Default is `0`.
+  - `value_type` (optional): How to interpret the normalized metric. `saturation` computes budget as `1 - normalized_value`; `budget` uses `normalized_value` directly. Default is `saturation`.
+  - `max_count_per_pod` (optional): Per-pod capacity. When > 0, the normalized value is `value / max_count`. When 0, the metric value is assumed to already be in [0, 1]. Default is `0`.
   - `baseline` (optional): Reserved headroom subtracted from budget. Default is `0.0`.
   - `fallback` (optional): Budget returned when scrape fails or metric is missing. Default is `0.0` (fail closed).
   - `pods_url` (optional): URL to scrape for dynamic pod count (e.g., `http://epp-svc:9090/metrics`). When set with `pods_metric`, `max_count = ready_pods * max_count_per_pod`.
@@ -660,7 +661,8 @@ The available gate types, at a glance:
 
   **No Prometheus server required.** This gate scrapes endpoints directly, making it suitable for
   deployments without a dedicated Prometheus instance. Use `max_count_per_pod` with `pods_url`/`pods_metric`
-  for dynamic scaling, or set `max_count_per_pod` to a static value for single-pod setups.
+  for dynamic scaling, or set `max_count_per_pod` to a static value for single-pod setups. For a
+  readiness metric where `1` means ready and `0` means unavailable, set `value_type` to `budget`.
 
 #### Admission gates
 
